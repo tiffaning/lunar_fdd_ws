@@ -1,0 +1,5 @@
+float64 confidence_level
+string fault_type
+uint8 detection_layer_used
+float64 computation_time_ms
+builtin_interfaces/Time timestamp

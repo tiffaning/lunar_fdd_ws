@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="lunar_ur10">
+
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+
+  <link name="world"/>
+
+  <xacro:ur_robot
+    name="lunar_ur10"
+    tf_prefix=""
+    parent="world"
+    joint_limits_parameters_file="$(find ur_description)/config/ur10/joint_limits.yaml"
+    kinematics_parameters_file="$(find ur_description)/config/ur10/default_kinematics.yaml"
+    physical_parameters_file="$(find ur_description)/config/ur10/physical_parameters.yaml"
+    visual_parameters_file="$(find ur_description)/config/ur10/visual_parameters.yaml"
+    use_fake_hardware="true"
+    sim_gazebo="true"
+    sim_ignition="false">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:ur_robot>
+
+  <!-- Construction end effector -->
+  <link name="construction_tool">
+    <visual>
+      <geometry>
+        <box size="0.1 0.05 0.2"/>
+      </geometry>
+      <material name="tool_material">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.1 0.05 0.2"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <joint name="tool_joint" type="fixed">
+    <parent link="tool0"/>
+    <child link="construction_tool"/>
+    <origin xyz="0 0 0.1" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Gazebo ros2_control plugin -->
+  <gazebo>
+    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <parameters>$(find construction_robot)/config/ros2_controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+  <!-- IMU sensor on base_link -->
+  <gazebo reference="base_link">
+    <sensor name="imu_sensor" type="imu">
+      <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+        <ros>
+          <namespace>/lunar_robot</namespace>
+          <remapping>~/out:=imu</remapping>
+        </ros>
+        <frame_name>base_link</frame_name>
+      </plugin>
+      <always_on>1</always_on>
+      <update_rate>100</update_rate>
+      <visualize>true</visualize>
+    </sensor>
+  </gazebo>
+
+</robot>

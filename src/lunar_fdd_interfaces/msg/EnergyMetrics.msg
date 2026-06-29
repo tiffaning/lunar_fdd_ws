@@ -1,0 +1,5 @@
+float64 cpu_usage_percent
+float64 memory_usage_mb
+float64 estimated_energy_joules
+string processing_component
+builtin_interfaces/Time timestamp
