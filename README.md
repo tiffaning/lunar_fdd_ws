@@ -56,7 +56,7 @@ ros2 topic hz /lunar_robot/imu
 ros2 control list_controllers
 
 Research Background
-This system addresses the energy-computational trade-off in fault detection for lunar construction robots by implementing model cascades that use lightweight anomaly detection before escalating to full hybrid FDD processing.
+This system addresses the energy-computational trade-off in fault detection (FDD) for lunar construction robots by implementing model cascades that use lightweight anomaly detection before escalating to full hybrid FDD processing.
 
 Author
 Tiffani Ng - University of Florida
