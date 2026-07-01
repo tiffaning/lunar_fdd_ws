@@ -1,0 +1,10 @@
+# Baseline: no faults injected
+# Used to collect healthy robot data
+experiment:
+  name: "baseline"
+  duration_seconds: 300.0
+  description: "Healthy robot baseline data collection"
+
+faults:
+  enabled: false
+  sequence: []

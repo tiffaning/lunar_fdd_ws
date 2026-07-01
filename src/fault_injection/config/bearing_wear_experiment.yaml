@@ -1,0 +1,17 @@
+# Progressive bearing wear on shoulder_lift_joint
+# Simulates lunar regolith abrasion over time
+experiment:
+  name: "bearing_wear"
+  duration_seconds: 300.0
+  description: "Progressive joint bearing degradation"
+
+faults:
+  enabled: true
+  sequence:
+    - fault_type: "bearing_wear"
+      affected_joint: "shoulder_lift_joint"
+      start_time: 60.0        # Fault begins at 60 seconds
+      end_time: 300.0         # Fault runs until experiment end
+      initial_severity: 0.1   # Starts mild
+      final_severity: 0.8     # Progresses to severe
+      progression: "linear"   # How severity increases over time

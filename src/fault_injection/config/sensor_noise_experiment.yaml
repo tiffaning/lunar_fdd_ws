@@ -1,0 +1,16 @@
+# Sensor noise from electromagnetic interference/regolith
+experiment:
+  name: "sensor_noise"
+  duration_seconds: 300.0
+  description: "Sensor degradation from lunar environment"
+
+faults:
+  enabled: true
+  sequence:
+    - fault_type: "sensor_noise"
+      affected_joint: "elbow_joint"
+      start_time: 30.0
+      end_time: 300.0
+      initial_severity: 0.05
+      final_severity: 0.4
+      progression: "linear"

@@ -1,0 +1,16 @@
+# Joint stiffness from regolith contamination
+experiment:
+  name: "joint_stiffness"
+  duration_seconds: 300.0
+  description: "Joint stiffness increase from regolith contamination"
+
+faults:
+  enabled: true
+  sequence:
+    - fault_type: "joint_stiffness"
+      affected_joint: "shoulder_pan_joint"
+      start_time: 45.0
+      end_time: 300.0
+      initial_severity: 0.1
+      final_severity: 0.9
+      progression: "linear"
