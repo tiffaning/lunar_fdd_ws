@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>performance_monitor</name>
+  <name>fault_injection</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="tiffani.k.ng@gmail.com">tiffa</maintainer>
@@ -11,7 +11,6 @@
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>lunar_fdd_interfaces</depend>
-  <depend>geometry_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
