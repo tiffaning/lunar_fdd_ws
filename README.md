@@ -4,11 +4,11 @@ Hybrid fault detection and diagnosis system for energy-efficient lunar construct
 
 ## Project Status
 
-- **Phase 1**: ✅ COMPLETE - Robot simulation environment
-- **Phase 2**: 🚧 IN PROGRESS - Performance monitoring + fault injection
-- **Phase 3**: 📋 PLANNED - Hybrid FDD algorithms
-- **Phase 4**: 📋 PLANNED - Model cascade implementation
-- **Phase 5**: 📋 PLANNED - Testing and evaluation
+- **Phase 1**: Robot simulation environment (done)
+- **Phase 2**: Performance monitoring + fault injection (in progress)
+- **Phase 3**: Hybrid FDD algorithms
+- **Phase 4**: Model cascade implementation
+- **Phase 5**: Testing and evaluation
 
 ## System Architecture
 Robot Simulation Environment
@@ -41,7 +41,7 @@ rosdep install --ignore-src --from-paths src -y
 colcon build --symlink-install
 source install/setup.bash
 
-# Launch simulation
+# Launch simulation in Gazebo
 ros2 launch construction_robot lunar_robot.launch.py
 
 # Test robot movement (in new terminal)
@@ -60,3 +60,4 @@ This system addresses the energy-computational trade-off in fault detection for 
 
 Author
 Tiffani Ng - University of Florida
+AiRIS Lab
