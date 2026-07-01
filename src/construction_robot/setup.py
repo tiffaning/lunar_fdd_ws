@@ -1,6 +1,3 @@
-from setuptools import find_packages, setup
-
-package_name = 'construction_robot'
 from setuptools import setup
 import os
 from glob import glob
@@ -15,18 +12,12 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        # Install launch files
         (os.path.join('share', package_name, 'launch'),
             glob('launch/*.launch.py')),
-        # Install urdf files
         (os.path.join('share', package_name, 'urdf'),
             glob('urdf/*')),
-        # Install config files
         (os.path.join('share', package_name, 'config'),
             glob('config/*')),
-	#scripts directory
-        (os.path.join('share', package_name, 'scripts'),
-            glob('scripts/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

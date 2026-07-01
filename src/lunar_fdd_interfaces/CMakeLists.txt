@@ -9,6 +9,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaultStatus.msg"
   "msg/SensorResiduals.msg"
   "msg/EnergyMetrics.msg"
+  "msg/FaultLabel.msg"
+  "msg/SensorSnapshot.msg"
   DEPENDENCIES builtin_interfaces
 )
 

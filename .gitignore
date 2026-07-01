@@ -8,3 +8,6 @@ __pycache__/
 
 *.bag
 *.mp4
+
+src/lunar_environment/models/lunar_surface/Haworth_final_adj_5mpp_surf.tif
+*.tif

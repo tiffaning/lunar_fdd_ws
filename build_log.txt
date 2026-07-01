@@ -1,0 +1,5 @@
+Starting >>> ur_dashboard_msgs
+Finished <<< ur_dashboard_msgs [1.21s]
+Starting >>> ur_controllers
+Finished <<< ur_controllers [0.54s]
+Starting >>> ur_robot_driver

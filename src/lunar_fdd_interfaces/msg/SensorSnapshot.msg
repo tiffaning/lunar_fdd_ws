@@ -1,0 +1,13 @@
+float64[] joint_positions
+float64[] joint_velocities
+float64[] joint_efforts
+float64[] joint_accelerations
+float64 imu_linear_accel_x
+float64 imu_linear_accel_y
+float64 imu_linear_accel_z
+float64 imu_angular_vel_x
+float64 imu_angular_vel_y
+float64 imu_angular_vel_z
+float64 timestamp_sec
+bool fault_active
+string fault_type

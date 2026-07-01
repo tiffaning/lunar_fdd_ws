@@ -1,0 +1,6 @@
+string fault_type
+string affected_joint
+float64 severity
+float64 progression_rate
+bool is_active
+builtin_interfaces/Time timestamp
