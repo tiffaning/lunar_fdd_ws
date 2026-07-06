@@ -12,5 +12,5 @@ faults:
       start_time: 30.0
       end_time: 300.0
       initial_severity: 0.05
-      final_severity: 0.4
+      final_severity: 0.6
       progression: "linear"
