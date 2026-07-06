@@ -6,6 +6,11 @@ log/
 __pycache__/
 .vscode/
 
+data/
+*.csv
+*.hdf5
+*.h5
+
 *.bag
 *.mp4
 

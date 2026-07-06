@@ -40,7 +40,7 @@ def generate_launch_description():
                 name='performance_monitor',
                 parameters=[{
                     'experiment_name': experiment,
-                    'log_dir': '/tmp/lunar_fdd_data'
+		    'log_dir': '/home/tiffa/lunar_fdd_ws/data/raw'
                 }],
                 output='screen'
             )
