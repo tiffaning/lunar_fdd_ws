@@ -14,7 +14,7 @@ Architecture note:
 """
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, Imu
 from lunar_fdd_interfaces.msg import FaultLabel, SensorSnapshot
 import yaml
 import time
@@ -50,6 +50,9 @@ class FaultInjectorNode(Node):
         self.current_joint_state = None
         self.current_fault_config = None
         self.experiment_running = False
+        # Latest IMU reading, degraded into the snapshot for sensor faults
+        self.current_imu = {'ax': 0.0, 'ay': 0.0, 'az': 0.0,
+                            'wx': 0.0, 'wy': 0.0, 'wz': 0.0}
 
         # Publishers
         self.fault_label_pub = self.create_publisher(
@@ -64,6 +67,11 @@ class FaultInjectorNode(Node):
         self.joint_sub = self.create_subscription(
             JointState, '/joint_states',
             self.joint_callback, 10
+        )
+        # IMU is degraded (EMI noise) for sensor faults before being logged
+        self.imu_sub = self.create_subscription(
+            Imu, '/lunar_robot/imu',
+            self.imu_callback, 10
         )
 
         # Timers
@@ -104,6 +112,17 @@ class FaultInjectorNode(Node):
                 f'Loaded config: {config_file}'
             )
             return config
+
+    def imu_callback(self, msg: Imu):
+        """Store latest IMU reading"""
+        self.current_imu = {
+            'ax': msg.linear_acceleration.x,
+            'ay': msg.linear_acceleration.y,
+            'az': msg.linear_acceleration.z,
+            'wx': msg.angular_velocity.x,
+            'wy': msg.angular_velocity.y,
+            'wz': msg.angular_velocity.z,
+        }
 
     def joint_callback(self, msg: JointState):
         """Store latest joint state"""
@@ -229,11 +248,22 @@ class FaultInjectorNode(Node):
             self.current_fault_config
         )
 
+        # Degrade IMU too: sensor_noise faults inject EMI noise into the IMU.
+        # Mechanical faults (bearing_wear/joint_stiffness) leave the IMU clean;
+        # their signature lives on the joints. This gives each fault type a
+        # distinct multi-channel signature for the Phase 3 classifier.
+        imu = dict(self.current_imu)
+        if self.current_fault_config['fault_type'] == 'sensor_noise':
+            imu = self.sensor_faults.apply_imu_noise(
+                imu, self.current_fault_config['severity']
+            )
+
         snapshot = SensorSnapshot()
         snapshot.joint_positions = pos
         snapshot.joint_velocities = vel
         snapshot.joint_efforts = eff
         snapshot.joint_accelerations = []
+        self._set_snapshot_imu(snapshot, imu)
         snapshot.fault_active = True
         snapshot.fault_type = self.current_fault_config['fault_type']
         snapshot.timestamp_sec = time.time()
@@ -247,10 +277,21 @@ class FaultInjectorNode(Node):
         snapshot.joint_velocities = list(joint_msg.velocity)
         snapshot.joint_efforts = list(joint_msg.effort)
         snapshot.joint_accelerations = []
+        self._set_snapshot_imu(snapshot, self.current_imu)
         snapshot.fault_active = False
         snapshot.fault_type = 'none'
         snapshot.timestamp_sec = time.time()
         self.degraded_snapshot_pub.publish(snapshot)
+
+    @staticmethod
+    def _set_snapshot_imu(snapshot: SensorSnapshot, imu: dict):
+        """Copy an IMU dict (ax/ay/az/wx/wy/wz) into a SensorSnapshot"""
+        snapshot.imu_linear_accel_x = imu['ax']
+        snapshot.imu_linear_accel_y = imu['ay']
+        snapshot.imu_linear_accel_z = imu['az']
+        snapshot.imu_angular_vel_x = imu['wx']
+        snapshot.imu_angular_vel_y = imu['wy']
+        snapshot.imu_angular_vel_z = imu['wz']
 
     def _end_experiment(self):
         """Clean shutdown at experiment end"""

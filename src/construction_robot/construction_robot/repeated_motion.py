@@ -51,16 +51,27 @@ class ContinuousMotionNode(Node):
     def __init__(self):
         super().__init__('continuous_motion')
 
-        self.publisher = self.create_publisher(
+        # Hybrid control: the 3 fault-target joints run on the effort controller,
+        # the 3 wrists on the position controller. Each pose is split and sent to
+        # both. /joint_states still reports all 6 joints via joint_state_broadcaster.
+        self.arm_pub = self.create_publisher(
             JointTrajectory,
-            '/joint_trajectory_controller/joint_trajectory',
+            '/arm_effort_controller/joint_trajectory',
+            10
+        )
+        self.wrist_pub = self.create_publisher(
+            JointTrajectory,
+            '/wrist_position_controller/joint_trajectory',
             10
         )
 
-        self.joint_names = [
+        # Joint order for the full 6-element pose arrays below.
+        self.arm_joints = [
             'shoulder_pan_joint',
             'shoulder_lift_joint',
-            'elbow_joint',
+            'elbow_joint'
+        ]
+        self.wrist_joints = [
             'wrist_1_joint',
             'wrist_2_joint',
             'wrist_3_joint'
@@ -86,7 +97,8 @@ class ContinuousMotionNode(Node):
     def check_controller(self):
         """Wait for controller to become available"""
         if not self.controller_ready:
-            if self.publisher.get_subscription_count() > 0:
+            if (self.arm_pub.get_subscription_count() > 0 and
+                    self.wrist_pub.get_subscription_count() > 0):
                 self.controller_ready = True
                 self.get_logger().info(
                     'Controller ready. Moving to home position...'
@@ -142,20 +154,32 @@ class ContinuousMotionNode(Node):
         self.current_duration = duration
 
     def send_pose(self, positions, duration_sec):
-        """Send joint trajectory command"""
-        msg = JointTrajectory()
-        msg.joint_names = self.joint_names
+        """Send joint trajectory command.
 
-        point = JointTrajectoryPoint()
-        point.positions = positions
-
-        # Convert float duration to sec/nanosec
+        The 6-element pose is split: joints 0-2 go to the arm effort controller,
+        joints 3-5 go to the wrist position controller, both with the same
+        time_from_start so the whole arm moves together.
+        """
+        # Convert float duration to sec/nanosec (shared by both messages)
         sec = int(duration_sec)
         nanosec = int((duration_sec - sec) * 1e9)
-        point.time_from_start = Duration(sec=sec, nanosec=nanosec)
+        time_from_start = Duration(sec=sec, nanosec=nanosec)
 
-        msg.points = [point]
-        self.publisher.publish(msg)
+        arm_point = JointTrajectoryPoint()
+        arm_point.positions = list(positions[0:3])
+        arm_point.time_from_start = time_from_start
+        arm_msg = JointTrajectory()
+        arm_msg.joint_names = self.arm_joints
+        arm_msg.points = [arm_point]
+        self.arm_pub.publish(arm_msg)
+
+        wrist_point = JointTrajectoryPoint()
+        wrist_point.positions = list(positions[3:6])
+        wrist_point.time_from_start = time_from_start
+        wrist_msg = JointTrajectory()
+        wrist_msg.joint_names = self.wrist_joints
+        wrist_msg.points = [wrist_point]
+        self.wrist_pub.publish(wrist_msg)
 
 
 def main(args=None):

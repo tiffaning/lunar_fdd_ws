@@ -5,8 +5,8 @@ Hybrid fault detection and diagnosis system for energy-efficient lunar construct
 ## Project Status
 
 - **Phase 1**: Robot simulation environment (done)
-- **Phase 2**: Performance monitoring + fault injection (in progress)
-- **Phase 3**: Hybrid FDD algorithms
+- **Phase 2**: Performance monitoring + fault injection (done)
+- **Phase 3**: Hybrid FDD algorithms (in progress)
 - **Phase 4**: Model cascade implementation
 - **Phase 5**: Testing and evaluation
 

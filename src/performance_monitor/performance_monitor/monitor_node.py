@@ -65,6 +65,14 @@ class PerformanceMonitor(Node):
             FaultLabel, '/fault_label',
             self.fault_callback, 10
         )
+        # The degraded snapshot from the fault injector is the source of truth
+        # for logging: it carries the fault-modified joint AND imu data (clean
+        # when no fault is active). Logging this - not raw /joint_states - is
+        # what makes injected faults actually appear in the training CSVs.
+        self.degraded_sub = self.create_subscription(
+            SensorSnapshot, '/degraded_sensor_snapshot',
+            self.degraded_snapshot_callback, 10
+        )
 
         # Publishers
         self.energy_pub = self.create_publisher(
@@ -88,21 +96,40 @@ class PerformanceMonitor(Node):
         )
 
     def joint_callback(self, msg: JointState):
-        """Process incoming joint state data"""
+        """Process incoming joint state data.
+
+        Note: logging is driven by degraded_snapshot_callback (which carries the
+        fault-modified data), NOT here. This callback only republishes the raw
+        snapshot for any consumer that wants the unmodified signal.
+        """
         self.current_joint_state = msg
 
-        # Log sensor data with current fault label synced
-        self.logger.log_sensor_data(
-            joint_positions=list(msg.position),
-            joint_velocities=list(msg.velocity),
-            joint_efforts=list(msg.effort),
-            imu_data=self.current_imu,
-            fault_active=self.current_fault_label.is_active,
-            fault_type=self.current_fault_label.fault_type
-        )
-
-        # Publish SensorSnapshot for Phase 3 to consume
+        # Publish raw SensorSnapshot (unmodified) for reference/debug
         self._publish_sensor_snapshot(msg)
+
+    def degraded_snapshot_callback(self, msg: SensorSnapshot):
+        """Log the fault-injector's (possibly degraded) snapshot to CSV.
+
+        This is the sensor data the Phase 3 models train on: fault-modified when
+        a fault is active, clean otherwise. Joint and IMU data + the fault label
+        all come from this single message, so they are consistent by construction.
+        """
+        imu = {
+            'ax': msg.imu_linear_accel_x,
+            'ay': msg.imu_linear_accel_y,
+            'az': msg.imu_linear_accel_z,
+            'wx': msg.imu_angular_vel_x,
+            'wy': msg.imu_angular_vel_y,
+            'wz': msg.imu_angular_vel_z,
+        }
+        self.logger.log_sensor_data(
+            joint_positions=list(msg.joint_positions),
+            joint_velocities=list(msg.joint_velocities),
+            joint_efforts=list(msg.joint_efforts),
+            imu_data=imu,
+            fault_active=msg.fault_active,
+            fault_type=msg.fault_type
+        )
 
     def imu_callback(self, msg: Imu):
         """Process IMU data"""

@@ -27,6 +27,19 @@ JOINT_INDEX = {
     'wrist_3_joint': 5
 }
 
+# Max effort (Nm) per joint, from the UR10 joint_limits.yaml. Degraded effort is
+# clamped to +/- this value: a real motor cannot exceed its rated torque, so a
+# worn bearing that demands more torque saturates the actuator rather than
+# reporting an unphysically large value.
+JOINT_EFFORT_LIMITS = {
+    'shoulder_pan_joint': 330.0,
+    'shoulder_lift_joint': 330.0,
+    'elbow_joint': 150.0,
+    'wrist_1_joint': 56.0,
+    'wrist_2_joint': 56.0,
+    'wrist_3_joint': 56.0
+}
+
 # Fault effect definitions
 # These modify what the joint state publisher reports
 # Phase 3 will compare these against physics model predictions
@@ -106,6 +119,18 @@ class JointDegradation:
         if 'effort_multiplier' in effects:
             mult = effects['effort_multiplier'](severity)
             eff[joint_idx] *= mult
+
+        # Apply friction multiplier (bearing_wear): a worn bearing needs more
+        # torque to overcome friction, so the measured effort scales up.
+        if 'friction_multiplier' in effects:
+            mult = effects['friction_multiplier'](severity)
+            eff[joint_idx] *= mult
+
+        # Clamp degraded effort to the actuator's physical torque limit
+        # (motor saturation) so the logged value stays physically plausible.
+        limit = JOINT_EFFORT_LIMITS.get(joint_name)
+        if limit is not None:
+            eff[joint_idx] = max(-limit, min(limit, eff[joint_idx]))
 
         return pos, vel, eff
 

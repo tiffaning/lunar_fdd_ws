@@ -1,11 +1,22 @@
 controller_manager:
   ros__parameters:
     update_rate: 100  # Hz
-    
+
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
-      
-    joint_trajectory_controller:
+
+    # Hybrid actuation:
+    #  - arm_effort_controller     -> EFFORT command on the 3 fault-target joints
+    #    (shoulder_pan/lift, elbow). Gazebo applies real torque via SetForce, so
+    #    /joint_states effort is nonzero and velocity reflects real dynamics.
+    #  - wrist_position_controller -> POSITION command on the 3 wrists. Kinematic
+    #    SetPosition -> stable/quiet. Wrists are not fault targets; their effort
+    #    stays 0, which is fine. This sidesteps the effort-control limit cycle
+    #    that the low-inertia wrists exhibited.
+    arm_effort_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    wrist_position_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 joint_state_broadcaster:
@@ -18,28 +29,57 @@ joint_state_broadcaster:
       - wrist_2_joint
       - wrist_3_joint
 
-joint_trajectory_controller:
+# --- Fault-target joints: effort (dynamic) control ---
+arm_effort_controller:
   ros__parameters:
     joints:
       - shoulder_pan_joint
       - shoulder_lift_joint
       - elbow_joint
-      - wrist_1_joint
-      - wrist_2_joint
-      - wrist_3_joint
-    
-    interface_name: position
-    
+
     command_interfaces:
-      - position
-      
+      - effort
+
     state_interfaces:
       - position
       - velocity
-      
+
+    # PID gains convert trajectory error -> commanded effort (Nm).
+    # Effort limits: 330/330/150 Nm. Stability-first values; raise p if tracking
+    # is too soft (exact tracking is not required -- faults are injected in post,
+    # we only need nonzero, reproducible, motion-correlated effort/velocity).
+    gains:
+      shoulder_pan_joint:  {p: 300.0, i: 0.0, d: 30.0}
+      shoulder_lift_joint: {p: 600.0, i: 0.0, d: 70.0}
+      elbow_joint:         {p: 400.0, i: 0.0, d: 40.0}
+
     state_publish_rate: 100.0
     action_monitor_rate: 20.0
-    
+
+    # Effort control leaves small residual velocity at held poses; disable the
+    # stopped-velocity check so trajectory goals are not spuriously aborted.
     constraints:
-      stopped_velocity_tolerance: 0.01
-      goal_time: 0.0  
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+
+# --- Wrist joints: position (kinematic) control, stable/quiet ---
+wrist_position_controller:
+  ros__parameters:
+    joints:
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
+      - velocity
+
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0

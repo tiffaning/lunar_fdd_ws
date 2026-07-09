@@ -84,9 +84,15 @@ def generate_launch_description():
                 output='screen'
             ),
             Node(
-                package='controller_manager', 
+                package='controller_manager',
                 executable='spawner',
-                arguments=['joint_trajectory_controller'],
+                arguments=['arm_effort_controller'],
+                output='screen'
+            ),
+            Node(
+                package='controller_manager',
+                executable='spawner',
+                arguments=['wrist_position_controller'],
                 output='screen'
             )
         ]
