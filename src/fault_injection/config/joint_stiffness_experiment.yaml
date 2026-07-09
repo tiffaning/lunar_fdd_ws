@@ -9,7 +9,7 @@ faults:
   sequence:
     - fault_type: "joint_stiffness"
       affected_joint: "shoulder_pan_joint"
-      start_time: 45.0
+      start_time: 30.0
       end_time: 300.0
       initial_severity: 0.1
       final_severity: 0.9

@@ -6,7 +6,7 @@ from datetime import datetime
 
 
 class DataLogger:
-    def __init__(self, experiment_name: str, log_dir: str = '/home/tiffa/lunar_fdd_ws/data/raw'):
+    def __init__(self, experiment_name: str, log_dir: str = '/home/tiffa/lunar_fdd_ws/data/raw-dynamic'):
         self.experiment_name = experiment_name
         self.log_dir = log_dir
         self.session_id = datetime.now().strftime('%Y%m%d_%H%M%S')

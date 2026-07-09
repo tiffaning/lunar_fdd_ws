@@ -13,7 +13,7 @@
     kinematics_parameters_file="$(find ur_description)/config/ur10/default_kinematics.yaml"
     physical_parameters_file="$(find ur_description)/config/ur10/physical_parameters.yaml"
     visual_parameters_file="$(find ur_description)/config/ur10/visual_parameters.yaml"
-    use_fake_hardware="true"
+    use_fake_hardware="false"
     sim_gazebo="true"
     sim_ignition="false">
     <origin xyz="0 0 0" rpy="0 0 0"/>

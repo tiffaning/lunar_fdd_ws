@@ -10,7 +10,7 @@ faults:
   sequence:
     - fault_type: "bearing_wear"
       affected_joint: "shoulder_lift_joint"
-      start_time: 60.0        # Fault begins at 60 seconds
+      start_time: 30.0        # Fault begins at 60 seconds
       end_time: 300.0         # Fault runs until experiment end
       initial_severity: 0.1   # Starts mild
       final_severity: 0.8     # Progresses to severe

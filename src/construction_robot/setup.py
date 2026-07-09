@@ -28,6 +28,7 @@ setup(
     entry_points={
         'console_scripts': [
             'safe_joint_test = construction_robot.safe_joint_test:main',
+            'repeated_motion = construction_robot.repeated_motion:main',
         ],
     },
 )
