@@ -3,14 +3,19 @@
 <package format="3">
   <name>hybrid_fdd</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Hybrid FDD system for lunar construction robots</description>
   <maintainer email="tiffani.k.ng@gmail.com">tiffa</maintainer>
-  <license>TODO: License declaration</license>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>lunar_fdd_interfaces</depend>
+  <depend>python3-numpy</depend>
+  <depend>python3-scipy</depend>
+  <depend>python3-scikit-learn</depend>
+  <depend>python3-joblib</depend>
+  <depend>python3-psutil</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

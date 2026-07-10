@@ -38,6 +38,41 @@ for j in range(6):
         FEATURE_NAMES.append(f'j{j}_residual_{stat}')
 
 
+# UR10 joint velocity limits (rad/s): pan/lift 120 deg/s, elbow/wrists 180 deg/s.
+# The kinematically-controlled wrists emit rare finite-difference spikes far
+# above these; clipping here (shared by offline training and the live node)
+# removes those measurement artifacts identically in both paths.
+JOINT_VELOCITY_LIMITS = [2.094, 2.094, 3.142, 3.142, 3.142, 3.142]
+
+
+# Fault-bearing feature channels for the anomaly detector (Isolation Forest):
+# effort + IMU + Kalman residual stats. Position/velocity motion features are
+# excluded because healthy motion variance drowns the fault signal there -- an
+# IF over all 150 features scores ~0.5 AUC on bearing_wear, ~0.62 overall, vs
+# ~0.71 overall (0.92 on sensor_noise) on this subset. The SVM still uses all
+# 150 features; only the unsupervised IF is restricted to these.
+ANOMALY_FEATURE_INDICES = [
+    i for i, n in enumerate(FEATURE_NAMES)
+    if ('_eff_' in n) or n.startswith('imu_') or ('_residual_' in n)
+]
+
+
+def _safe_skew(signal):
+    """stats.skew, but 0.0 for (near-)constant signals to avoid 0/0 -> NaN.
+    Constant channels (e.g. the kinematic wrists' effort == 0) would otherwise
+    yield version-dependent NaN/0 and poison the scaler."""
+    if np.std(signal) < 1e-10:
+        return 0.0
+    return float(stats.skew(signal))
+
+
+def _safe_kurt(signal):
+    """stats.kurtosis, but 0.0 for (near-)constant signals (see _safe_skew)."""
+    if np.std(signal) < 1e-10:
+        return 0.0
+    return float(stats.kurtosis(signal))
+
+
 class FeatureExtractor:
     def __init__(self, window_size: int = 100):
         """
@@ -70,6 +105,9 @@ class FeatureExtractor:
               [0.0] * (6 - len(snapshot.joint_velocities))
         eff = list(snapshot.joint_efforts) + \
               [0.0] * (6 - len(snapshot.joint_efforts))
+        # Clip velocities to physical joint limits (drops kinematic-wrist spikes)
+        vel = [max(-JOINT_VELOCITY_LIMITS[j], min(JOINT_VELOCITY_LIMITS[j], vel[j]))
+               for j in range(6)]
         imu = [
             snapshot.imu_linear_accel_x,
             snapshot.imu_linear_accel_y,
@@ -117,8 +155,8 @@ class FeatureExtractor:
                 features.extend([
                     np.mean(signal),
                     np.std(signal),
-                    float(stats.skew(signal)),
-                    float(stats.kurtosis(signal)),
+                    _safe_skew(signal),
+                    _safe_kurt(signal),
                     np.sqrt(np.mean(signal ** 2)),      # RMS
                     np.max(signal) - np.min(signal)     # Range
                 ])
@@ -129,8 +167,8 @@ class FeatureExtractor:
             features.extend([
                 np.mean(signal),
                 np.std(signal),
-                float(stats.skew(signal)),
-                float(stats.kurtosis(signal))
+                _safe_skew(signal),
+                _safe_kurt(signal)
             ])
 
         # Residual features from Kalman filter

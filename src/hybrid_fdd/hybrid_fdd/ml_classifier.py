@@ -18,6 +18,8 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import classification_report, confusion_matrix
 
+from hybrid_fdd.feature_extractor import ANOMALY_FEATURE_INDICES
+
 
 class MLClassifier:
     def __init__(self, model_dir: str):
@@ -32,6 +34,7 @@ class MLClassifier:
         self.svm_classifier = None
         self.scaler = None
         self.label_encoder = None
+        self.severity_regressor = None
         self.is_loaded = False
 
         # Anomaly threshold for Isolation Forest
@@ -54,7 +57,22 @@ class MLClassifier:
                 os.path.join(self.model_dir, 'label_encoder.pkl')
             )
             self.is_loaded = True
-            print(f'[MLClassifier] Models loaded from {self.model_dir}')
+            # Calibrated anomaly threshold (falls back to the default if absent)
+            try:
+                self.anomaly_threshold = float(joblib.load(
+                    os.path.join(self.model_dir, 'anomaly_threshold.pkl')
+                ))
+            except (FileNotFoundError, OSError):
+                pass
+            # Optional severity regressor (severity_estimate stays 0 if absent)
+            try:
+                self.severity_regressor = joblib.load(
+                    os.path.join(self.model_dir, 'severity_regressor.pkl')
+                )
+            except (FileNotFoundError, OSError):
+                pass
+            print(f'[MLClassifier] Models loaded from {self.model_dir} '
+                  f'(anomaly threshold {self.anomaly_threshold:.4f})')
             return True
         except FileNotFoundError as e:
             print(f'[MLClassifier] Model files not found: {e}')
@@ -80,8 +98,10 @@ class MLClassifier:
             feature_vector.reshape(1, -1)
         )
 
-        # Stage 1: Anomaly detection
-        anomaly_score = self.isolation_forest.decision_function(features)[0]
+        # Stage 1: Anomaly detection (IF uses the fault-bearing feature subset)
+        anomaly_score = self.isolation_forest.decision_function(
+            features[:, ANOMALY_FEATURE_INDICES]
+        )[0]
         is_anomaly = anomaly_score < self.anomaly_threshold
 
         if not is_anomaly:
@@ -96,6 +116,49 @@ class MLClassifier:
 
         return fault_type, confidence, True
 
+    def classify_continuous(self, feature_vector: np.ndarray):
+        """
+        Standard (continuous) hybrid FDD: run BOTH stages every cycle, no gating.
+
+        Unlike predict() -- which gates the SVM behind the anomaly check and is
+        meant for the Phase 4 cascade -- this always runs the SVM so a fault is
+        classified even when the (imperfect) Isolation Forest misses the anomaly.
+        The IF result is returned separately as an independent anomaly signal.
+
+        Returns:
+            fault_type: string label (from SVM)
+            confidence: float 0.0-1.0 (SVM max class probability)
+            is_anomaly: bool (Isolation Forest)
+            anomaly_score: float (IF decision function; lower = more anomalous)
+            severity: float 0.0-1.0 (regressed fault severity; 0 if no regressor)
+        """
+        if not self.is_loaded:
+            return 'unknown', 0.0, False, 0.0, 0.0
+
+        features = self.scaler.transform(feature_vector.reshape(1, -1))
+
+        anomaly_score = float(
+            self.isolation_forest.decision_function(
+                features[:, ANOMALY_FEATURE_INDICES]
+            )[0]
+        )
+        is_anomaly = anomaly_score < self.anomaly_threshold
+
+        svm_prediction = self.svm_classifier.predict(features)[0]
+        svm_probabilities = self.svm_classifier.predict_proba(features)[0]
+        fault_type = self.label_encoder.inverse_transform(
+            [svm_prediction]
+        )[0]
+        confidence = float(np.max(svm_probabilities))
+
+        severity = 0.0
+        if self.severity_regressor is not None:
+            severity = float(np.clip(
+                self.severity_regressor.predict(features)[0], 0.0, 1.0
+            ))
+
+        return fault_type, confidence, is_anomaly, anomaly_score, severity
+
     def get_isolation_forest_score(self, feature_vector: np.ndarray):
         """
         Fast anomaly score only - used by Phase 4 cascade Layer 2.
@@ -107,4 +170,6 @@ class MLClassifier:
         if not self.is_loaded:
             return 0.0
         features = self.scaler.transform(feature_vector.reshape(1, -1))
-        return float(self.isolation_forest.decision_function(features)[0])
+        return float(self.isolation_forest.decision_function(
+            features[:, ANOMALY_FEATURE_INDICES]
+        )[0])
