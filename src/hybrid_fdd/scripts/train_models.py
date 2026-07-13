@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import IsolationForest, RandomForestRegressor
 from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score,
@@ -324,6 +325,47 @@ def train_and_save_models(X, y, severities, groups, model_dir: str):
             print(f'    {ft:16s} MAE: '
                   f'{mean_absolute_error(sev_true[m], sev_pred[m]):.3f}')
 
+    # --- Phase 4 Layer 2: supervised decision tree (cheap mid-tier) ---
+    # Shallow tree on the fault-bearing subset. Fast (~0.1ms) and, being
+    # supervised, it can screen bearing_wear (which the unsupervised IF cannot).
+    # In the cascade it classifies when confident and escalates to Layer 3 (SVM)
+    # when its class probability is below threshold.
+    print(f'\n  Training Layer 2 decision tree on {len(X_train)} samples...')
+    # Shallow tree with a leaf-size floor: deep/pure leaves give predict_proba
+    # ~1.0 always, so confidence never falls below the escalation threshold and
+    # Layer 3 stays unused. These give calibrated-ish confidence (leaves hold
+    # class mixtures) -> uncertain windows escalate to the SVM, confident ones
+    # resolve cheaply at Layer 2. Offline: kept-L2 acc ~0.93 vs escalated ~0.53.
+    decision_tree = DecisionTreeClassifier(
+        max_depth=6, min_samples_leaf=30,
+        random_state=42, class_weight='balanced'
+    )
+    decision_tree.fit(X_train[:, anom], y_train)
+    dt_pred = decision_tree.predict(X_test[:, anom])
+    print('  Layer 2 tree report:')
+    print(classification_report(
+        y_test, dt_pred, target_names=label_encoder.classes_
+    ))
+
+    # --- Phase 4 Layer 1: statistical baselines (cheap health screen) ---
+    # From healthy TRAINING windows, in RAW (unscaled) units, since the cascade's
+    # Layer 1 works on raw rolling buffers. It compares a window's max |residual|
+    # and per-joint effort RMS to these to decide "confidently healthy" vs escalate.
+    resid_max_idx = [FEATURE_NAMES.index(f'j{j}_residual_max') for j in range(6)]
+    eff_rms_idx = [FEATURE_NAMES.index(f'j{j}_eff_rms') for j in range(6)]
+    Xh_raw = X[train_healthy_idx]
+    per_window_maxresid = Xh_raw[:, resid_max_idx].max(axis=1)
+    layer1_baseline = {
+        # residual value treated as clearly anomalous (healthy mean + 4 sigma)
+        'resid_scale': float(
+            per_window_maxresid.mean() + 4.0 * per_window_maxresid.std()
+        ),
+        'eff_rms_mean': Xh_raw[:, eff_rms_idx].mean(axis=0).tolist(),
+        'eff_rms_std': (Xh_raw[:, eff_rms_idx].std(axis=0) + 1e-6).tolist(),
+    }
+    print(f'  Layer 1 baseline: resid_scale='
+          f'{layer1_baseline["resid_scale"]:.4f}')
+
     # --- Confusion Matrix Plot ---
     cm = confusion_matrix(y_test, y_pred)
     plt.figure(figsize=(8, 6))
@@ -358,6 +400,10 @@ def train_and_save_models(X, y, severities, groups, model_dir: str):
                 os.path.join(model_dir, 'label_encoder.pkl'))
     joblib.dump(severity_regressor,
                 os.path.join(model_dir, 'severity_regressor.pkl'))
+    joblib.dump(decision_tree,
+                os.path.join(model_dir, 'decision_tree.pkl'))
+    joblib.dump(layer1_baseline,
+                os.path.join(model_dir, 'layer1_baseline.pkl'))
 
     print(f'\n  Models saved to: {model_dir}')
     print('  Files:')

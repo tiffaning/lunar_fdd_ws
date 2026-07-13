@@ -36,6 +36,7 @@ setup(
     entry_points={
         'console_scripts': [
             'hybrid_fdd_node = hybrid_fdd.hybrid_fdd_node:main',
+            'cascade_fdd_node = hybrid_fdd.cascade_fdd_node:main',
         ],
     },
 )

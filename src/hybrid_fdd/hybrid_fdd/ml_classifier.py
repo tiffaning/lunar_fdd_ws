@@ -35,6 +35,7 @@ class MLClassifier:
         self.scaler = None
         self.label_encoder = None
         self.severity_regressor = None
+        self.decision_tree = None        # Phase 4 cascade Layer 2
         self.is_loaded = False
 
         # Anomaly threshold for Isolation Forest
@@ -68,6 +69,13 @@ class MLClassifier:
             try:
                 self.severity_regressor = joblib.load(
                     os.path.join(self.model_dir, 'severity_regressor.pkl')
+                )
+            except (FileNotFoundError, OSError):
+                pass
+            # Optional Phase 4 Layer 2 decision tree
+            try:
+                self.decision_tree = joblib.load(
+                    os.path.join(self.model_dir, 'decision_tree.pkl')
                 )
             except (FileNotFoundError, OSError):
                 pass
@@ -158,6 +166,35 @@ class MLClassifier:
             ))
 
         return fault_type, confidence, is_anomaly, anomaly_score, severity
+
+    def classify_tree(self, feature_vector: np.ndarray):
+        """
+        Phase 4 cascade Layer 2: fast supervised classification via the decision
+        tree on the fault-bearing feature subset (effort + IMU + residual).
+
+        Returns:
+            fault_type: string label
+            confidence: float 0.0-1.0 (tree class probability)
+        """
+        if not self.is_loaded or self.decision_tree is None:
+            return 'unknown', 0.0
+        features = self.scaler.transform(feature_vector.reshape(1, -1))
+        sub = features[:, ANOMALY_FEATURE_INDICES]
+        pred = self.decision_tree.predict(sub)[0]
+        proba = self.decision_tree.predict_proba(sub)[0]
+        fault_type = self.label_encoder.inverse_transform([pred])[0]
+        confidence = float(np.max(proba))
+        return fault_type, confidence
+
+    def predict_severity(self, feature_vector: np.ndarray):
+        """Regress fault severity (0.0-1.0). Returns 0.0 if no regressor loaded.
+        Used by the cascade to attach a severity to Layer 2 fault detections."""
+        if not self.is_loaded or self.severity_regressor is None:
+            return 0.0
+        features = self.scaler.transform(feature_vector.reshape(1, -1))
+        return float(np.clip(
+            self.severity_regressor.predict(features)[0], 0.0, 1.0
+        ))
 
     def get_isolation_forest_score(self, feature_vector: np.ndarray):
         """
