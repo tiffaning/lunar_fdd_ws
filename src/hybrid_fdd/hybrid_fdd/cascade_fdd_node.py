@@ -67,13 +67,18 @@ class CascadeFDDNode(Node):
         # the useful Layer-1 operating point is ~0.9 (stop only when very
         # confident healthy); 0.3 stopped on nearly everything and missed faults.
         self.declare_parameter('l1_threshold', 0.9)   # normality conf < this -> L2
-        self.declare_parameter('l2_threshold', 0.8)   # tree conf < this -> L3
+        self.declare_parameter('l2_threshold', 0.8)   # tree FAULT conf < this -> L3
+        # Accept a Layer 2 'none' at a lower bar than a fault: escalating to the
+        # SVM just to double-check a healthy call wastes energy on the common
+        # case. Only uncertain FAULT calls need Layer 3 confirmation.
+        self.declare_parameter('l2_none_threshold', 0.5)
 
         model_dir = self.get_parameter('model_dir').value
         self.window_size = self.get_parameter('window_size').value
         self.classify_every = self.get_parameter('classify_every').value
         self.l1_threshold = self.get_parameter('l1_threshold').value
         self.l2_threshold = self.get_parameter('l2_threshold').value
+        self.l2_none_threshold = self.get_parameter('l2_none_threshold').value
 
         # Pipeline components (Layer 3 == the continuous hybrid, reused verbatim)
         self.kalman = KalmanFilter(n_joints=6)
@@ -185,7 +190,13 @@ class CascadeFDDNode(Node):
             features = self.extractor.extract_features()
             fault_type, confidence = self.classifier.classify_tree(features)
             is_anomaly = fault_type != 'none'
-            if confidence < self.l2_threshold:
+            # Asymmetric escalation: escalate an uncertain FAULT call to the SVM
+            # for accurate confirmation, but accept a 'none' call at a lower bar.
+            fault_uncertain = (fault_type != 'none' and
+                               confidence < self.l2_threshold)
+            none_uncertain = (fault_type == 'none' and
+                              confidence < self.l2_none_threshold)
+            if fault_uncertain or none_uncertain:
                 # --- Layer 3 (full hybrid) ---
                 layer_used = 3
                 (fault_type, confidence, is_anomaly,
