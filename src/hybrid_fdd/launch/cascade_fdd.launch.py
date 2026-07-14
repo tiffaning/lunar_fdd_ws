@@ -17,9 +17,15 @@ def generate_launch_description():
     )
     l1_arg = DeclareLaunchArgument('l1_threshold', default_value='0.9')
     l2_arg = DeclareLaunchArgument('l2_threshold', default_value='0.8')
+    l2n_arg = DeclareLaunchArgument('l2_none_threshold', default_value='0.5')
+    record_arg = DeclareLaunchArgument(
+        'record_all_layers', default_value='false',
+        description='Log all-layer data for the offline threshold grid search')
     experiment = LaunchConfiguration('experiment')
     l1_threshold = LaunchConfiguration('l1_threshold')
     l2_threshold = LaunchConfiguration('l2_threshold')
+    l2_none_threshold = LaunchConfiguration('l2_none_threshold')
+    record_all_layers = LaunchConfiguration('record_all_layers')
 
     hybrid_fdd_pkg = get_package_share_directory('hybrid_fdd')
     fault_injection_pkg = get_package_share_directory('fault_injection')
@@ -72,7 +78,27 @@ def generate_launch_description():
                 'model_dir': os.path.join(hybrid_fdd_pkg, 'models'),
                 'window_size': 100,
                 'l1_threshold': l1_threshold,
-                'l2_threshold': l2_threshold
+                'l2_threshold': l2_threshold,
+                'l2_none_threshold': l2_none_threshold,
+                'record_all_layers': record_all_layers,
+                'experiment_name': experiment,
+                'record_dir': os.path.expanduser(
+                    '~/lunar_fdd_ws/data/phase5_grid')
+            }],
+            output='screen'
+        )
+    ])
+
+    # Phase 5 evaluation logger (detection + ground truth + energy -> CSV)
+    evaluator = TimerAction(period=10.0, actions=[
+        Node(
+            package='hybrid_fdd',
+            executable='fdd_evaluator_node',
+            name='fdd_evaluator_node',
+            parameters=[{
+                'strategy': 'cascade',
+                'experiment_name': experiment,
+                'log_dir': os.path.expanduser('~/lunar_fdd_ws/data/phase5')
             }],
             output='screen'
         )
@@ -82,8 +108,11 @@ def generate_launch_description():
         experiment_arg,
         l1_arg,
         l2_arg,
+        l2n_arg,
+        record_arg,
         robot,
         monitor,
         fault_injector,
         cascade,
+        evaluator,
     ])

@@ -33,13 +33,16 @@ Design notes:
 import rclpy
 from rclpy.node import Node
 from lunar_fdd_interfaces.msg import (
-    SensorSnapshot, FDDResult, SensorResiduals, EnergyMetrics, FaultStatus
+    SensorSnapshot, FDDResult, SensorResiduals, EnergyMetrics, FaultStatus,
+    FaultLabel
 )
 import numpy as np
 import joblib
+import csv
 import os
 import time
 from collections import deque
+from datetime import datetime
 
 from hybrid_fdd.kalman_filter import KalmanFilter
 from hybrid_fdd.feature_extractor import FeatureExtractor
@@ -72,6 +75,13 @@ class CascadeFDDNode(Node):
         # SVM just to double-check a healthy call wastes energy on the common
         # case. Only uncertain FAULT calls need Layer 3 confirmation.
         self.declare_parameter('l2_none_threshold', 0.5)
+        # Grid-search data collection: run ALL layers every window and log their
+        # confidences/predictions/times, so the offline evaluator can replay any
+        # threshold combination (Pareto frontier) from one run per scenario.
+        self.declare_parameter('record_all_layers', False)
+        self.declare_parameter('experiment_name', 'unknown')
+        self.declare_parameter('record_dir', os.path.expanduser(
+            '~/lunar_fdd_ws/data/phase5_grid'))
 
         model_dir = self.get_parameter('model_dir').value
         self.window_size = self.get_parameter('window_size').value
@@ -79,6 +89,7 @@ class CascadeFDDNode(Node):
         self.l1_threshold = self.get_parameter('l1_threshold').value
         self.l2_threshold = self.get_parameter('l2_threshold').value
         self.l2_none_threshold = self.get_parameter('l2_none_threshold').value
+        self.record_all = self.get_parameter('record_all_layers').value
 
         # Pipeline components (Layer 3 == the continuous hybrid, reused verbatim)
         self.kalman = KalmanFilter(n_joints=6)
@@ -109,8 +120,33 @@ class CascadeFDDNode(Node):
         try:
             import psutil
             self.process = psutil.Process()
+            self.n_cores = psutil.cpu_count() or 1
         except Exception:
             self.process = None
+            self.n_cores = 1
+
+        # Grid-search recording setup (ground truth + per-window all-layer log)
+        self.gt_type = 'none'
+        self.gt_sev = 0.0
+        self.gt_active = False
+        self.record_writer = None
+        if self.record_all:
+            rdir = self.get_parameter('record_dir').value
+            os.makedirs(rdir, exist_ok=True)
+            exp = self.get_parameter('experiment_name').value
+            sid = datetime.now().strftime('%Y%m%d_%H%M%S')
+            self._record_path = os.path.join(rdir, f'record_{exp}_{sid}.csv')
+            self._record_f = open(self._record_path, 'w', newline='')
+            self.record_writer = csv.writer(self._record_f)
+            self.record_writer.writerow([
+                't_rel', 'l1_conf', 'l2_pred', 'l2_conf', 't1_ms', 't2_ms',
+                'l3_pred', 'l3_conf', 'l3_sev', 't3_ms',
+                'gt_type', 'gt_sev', 'gt_active'])
+            self._record_t0 = time.time()
+            self.create_subscription(
+                FaultLabel, '/fault_label', self._cb_gt, 10)
+            self.get_logger().info(
+                f'record_all_layers ON -> {self._record_path}')
 
         # I/O
         self.snapshot_sub = self.create_subscription(
@@ -155,7 +191,65 @@ class CascadeFDDNode(Node):
         self.sample_count += 1
         if (self.extractor.is_ready() and
                 self.sample_count % self.classify_every == 0):
-            self._run_cascade(residuals)
+            if self.record_writer is not None:
+                self._record_layers(residuals)
+            else:
+                self._run_cascade(residuals)
+
+    def _cb_gt(self, m: FaultLabel):
+        self.gt_type = m.fault_type
+        self.gt_sev = m.severity
+        self.gt_active = m.is_active
+
+    def _record_layers(self, residuals):
+        """Grid-search mode: run every layer with individual timing, log a row,
+        and publish the decision the real thresholds would make (reusing the
+        already-computed values so no layer is run twice)."""
+        s = time.perf_counter()
+        conf_none = self._layer1_normality_confidence()
+        t1 = (time.perf_counter() - s) * 1000.0
+        s = time.perf_counter()
+        features = self.extractor.extract_features()
+        l2_type, l2_conf = self.classifier.classify_tree(features)
+        t2 = (time.perf_counter() - s) * 1000.0
+        s = time.perf_counter()
+        (l3_type, l3_conf, l3_anom, _sc, l3_sev) = \
+            self.classifier.classify_continuous(features)
+        t3 = (time.perf_counter() - s) * 1000.0
+
+        self.record_writer.writerow([
+            round(time.time() - self._record_t0, 3),
+            round(conf_none, 4), l2_type, round(l2_conf, 4),
+            round(t1, 4), round(t2, 4),
+            l3_type, round(l3_conf, 4), round(l3_sev, 4), round(t3, 4),
+            self.gt_type, round(self.gt_sev, 4), self.gt_active])
+        self._record_f.flush()
+
+        # Publish the real-threshold decision (reuse computed values)
+        if conf_none >= self.l1_threshold:
+            layer_used, fault_type, confidence, severity, is_anomaly = \
+                1, 'none', conf_none, 0.0, False
+            proc = t1
+        else:
+            fault_uncertain = (l2_type != 'none' and
+                               l2_conf < self.l2_threshold)
+            none_uncertain = (l2_type == 'none' and
+                              l2_conf < self.l2_none_threshold)
+            if fault_uncertain or none_uncertain:
+                layer_used, fault_type, confidence, is_anomaly, severity = \
+                    3, l3_type, l3_conf, l3_anom, l3_sev
+                proc = t1 + t2 + t3
+            else:
+                layer_used, fault_type, confidence = 2, l2_type, l2_conf
+                is_anomaly = l2_type != 'none'
+                severity = l3_sev if l2_type != 'none' else 0.0
+                proc = t1 + t2
+        self.detection_count += 1
+        self.layer_counts[layer_used] += 1
+        self._publish_fdd_result(fault_type, confidence, is_anomaly,
+                                 severity, residuals, proc)
+        self._publish_status(fault_type, confidence, layer_used, proc)
+        self._publish_energy_metrics(proc)
 
     # --- Layer 1: cheap statistical health screen ---
     def _layer1_normality_confidence(self):
@@ -260,7 +354,9 @@ class CascadeFDDNode(Node):
         self.status_pub.publish(msg)
 
     def _publish_energy_metrics(self, processing_time_ms):
-        cpu = self.process.cpu_percent() if self.process else 0.0
+        # Normalize by core count (psutil sums across cores) -> 0-100% system %.
+        cpu = (self.process.cpu_percent() / self.n_cores
+               if self.process else 0.0)
         mem = (self.process.memory_info().rss / 1024 / 1024
                if self.process else 0.0)
         energy = (cpu / 100.0) * 15.0 * (processing_time_ms / 1000.0)

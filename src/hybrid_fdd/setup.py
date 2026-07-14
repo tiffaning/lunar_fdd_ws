@@ -37,6 +37,7 @@ setup(
         'console_scripts': [
             'hybrid_fdd_node = hybrid_fdd.hybrid_fdd_node:main',
             'cascade_fdd_node = hybrid_fdd.cascade_fdd_node:main',
+            'fdd_evaluator_node = hybrid_fdd.fdd_evaluator_node:main',
         ],
     },
 )

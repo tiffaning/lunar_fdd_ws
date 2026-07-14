@@ -77,6 +77,7 @@ class HybridFDDNode(Node):
         self.sample_count = 0
         self.detection_count = 0
         self.process = psutil.Process()
+        self.n_cores = psutil.cpu_count() or 1
 
         # Subscriber: the (possibly degraded) sensor feed from the fault injector
         self.snapshot_sub = self.create_subscription(
@@ -175,7 +176,9 @@ class HybridFDDNode(Node):
 
     def _publish_energy_metrics(self, processing_time_ms):
         """Log computational cost of this detection cycle (for Phase 5)."""
-        cpu = self.process.cpu_percent()
+        # Normalize by core count: psutil sums across cores (can exceed 100%);
+        # dividing gives a 0-100% system-wide fraction so energy stays <= 15W.
+        cpu = self.process.cpu_percent() / self.n_cores
         mem = self.process.memory_info().rss / 1024 / 1024
         # Energy for this cycle: CPU fraction * processor TDP (15W) * time.
         energy = (cpu / 100.0) * 15.0 * (processing_time_ms / 1000.0)

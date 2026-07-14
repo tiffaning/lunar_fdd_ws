@@ -77,10 +77,26 @@ def generate_launch_description():
         )
     ])
 
+    # Phase 5 evaluation logger (detection + ground truth + energy -> CSV)
+    evaluator = TimerAction(period=10.0, actions=[
+        Node(
+            package='hybrid_fdd',
+            executable='fdd_evaluator_node',
+            name='fdd_evaluator_node',
+            parameters=[{
+                'strategy': 'continuous',
+                'experiment_name': experiment,
+                'log_dir': os.path.expanduser('~/lunar_fdd_ws/data/phase5')
+            }],
+            output='screen'
+        )
+    ])
+
     return LaunchDescription([
         experiment_arg,
         robot,
         monitor,
         fault_injector,
         hybrid_fdd,
+        evaluator,
     ])
